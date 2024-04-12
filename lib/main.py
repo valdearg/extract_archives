@@ -2,11 +2,13 @@
 
 import json
 import os
-import tempfile
-import typing
-import time
 import shutil
-from base64 import b64encode, b64decode
+import tempfile
+import time
+import typing
+import zipfile
+from base64 import b64decode, b64encode
+from pathlib import Path
 from random import choice
 from string import ascii_lowercase, ascii_uppercase, digits
 from urllib.parse import quote
@@ -19,11 +21,8 @@ import uvicorn
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, responses, status
 from pydantic import BaseModel
 from pygifsicle import optimize
-from requests import Response
-
-import zipfile
-from pathlib import Path
 from pyunpack import Archive
+from requests import Response
 
 APP = FastAPI()
 
@@ -99,7 +98,9 @@ def extract_folder_name(zip_filename, nc_file_path):
 
 
 def random_string(size: int) -> str:
-    return "".join(choice(ascii_lowercase + ascii_uppercase + digits) for _ in range(size))
+    return "".join(
+        choice(ascii_lowercase + ascii_uppercase + digits) for _ in range(size)
+    )
 
 
 def get_nc_url() -> str:
@@ -107,7 +108,9 @@ def get_nc_url() -> str:
 
 
 def sign_request(headers: dict, user="") -> None:
-    headers["AUTHORIZATION-APP-API"] = b64encode(f"{user}:{os.environ['APP_SECRET']}".encode("UTF=8"))
+    headers["AUTHORIZATION-APP-API"] = b64encode(
+        f"{user}:{os.environ['APP_SECRET']}".encode("UTF=8")
+    )
     headers["EX-APP-ID"] = os.environ["APP_ID"]
     headers["EX-APP-VERSION"] = os.environ["APP_VERSION"]
     headers["OCS-APIRequest"] = "true"
@@ -122,24 +125,30 @@ def sign_check(request: Request) -> str:
     }
     # AA-VERSION contains AppAPI version, for now it can be only one version, so no handling of it.
     if headers["EX-APP-ID"] != os.environ["APP_ID"]:
-        raise ValueError(f"Invalid EX-APP-ID:{headers['EX-APP-ID']} != {os.environ['APP_ID']}")
+        raise ValueError(
+            f"Invalid EX-APP-ID:{headers['EX-APP-ID']} != {os.environ['APP_ID']}"
+        )
 
     if headers["EX-APP-VERSION"] != os.environ["APP_VERSION"]:
-        raise ValueError(f"Invalid EX-APP-VERSION:{headers['EX-APP-VERSION']} <=> {os.environ['APP_VERSION']}")
+        raise ValueError(
+            f"Invalid EX-APP-VERSION:{headers['EX-APP-VERSION']} <=> {os.environ['APP_VERSION']}"
+        )
 
     auth_aa = b64decode(headers.get("AUTHORIZATION-APP-API", "")).decode("UTF-8")
     username, app_secret = auth_aa.split(":", maxsplit=1)
     if app_secret != os.environ["APP_SECRET"]:
-        raise ValueError(f"Invalid APP_SECRET:{app_secret} != {os.environ['APP_SECRET']}")
+        raise ValueError(
+            f"Invalid APP_SECRET:{app_secret} != {os.environ['APP_SECRET']}"
+        )
     return username
 
 
 def ocs_call(
-        method: str,
-        path: str,
-        params: typing.Optional[dict] = None,
-        json_data: typing.Optional[typing.Union[dict, list]] = None,
-        **kwargs,
+    method: str,
+    path: str,
+    params: typing.Optional[dict] = None,
+    json_data: typing.Optional[typing.Union[dict, list]] = None,
+    **kwargs,
 ):
     method = method.upper()
     if params is None:
@@ -157,25 +166,27 @@ def ocs_call(
         params=params,
         content=data_bytes,
         headers=headers,
-        timeout=30
+        timeout=30,
     )
 
 
-def dav_call(method: str, path: str, data: typing.Optional[typing.Union[str, bytes]] = None, **kwargs):
+def dav_call(
+    method: str,
+    path: str,
+    data: typing.Optional[typing.Union[str, bytes]] = None,
+    **kwargs,
+):
     headers = kwargs.pop("headers", {})
     data_bytes = None
     if data is not None:
         data_bytes = data.encode("UTF-8") if isinstance(data, str) else data
     path = quote("/remote.php/dav" + path)
-    folder_path = path.rsplit('/', 1)[0]
+    folder_path = path.rsplit("/", 1)[0]
     sign_request(headers, kwargs.get("user", ""))
 
     # creating the folder
     httpx.request(
-        "MKCOL",
-        url=get_nc_url() + folder_path,
-        headers=headers,
-        timeout=3000
+        "MKCOL", url=get_nc_url() + folder_path, headers=headers, timeout=3000
     )
 
     # performing the request
@@ -184,13 +195,17 @@ def dav_call(method: str, path: str, data: typing.Optional[typing.Union[str, byt
         url=get_nc_url() + path,
         content=data_bytes,
         headers=headers,
-        timeout=3000
+        timeout=3000,
     )
 
 
 def nc_log(log_lvl: int, content: str):
     print(content)
-    ocs_call("POST", "/ocs/v1.php/apps/app_api/api/v1/log", json_data={"level": log_lvl, "message": content})
+    ocs_call(
+        "POST",
+        "/ocs/v1.php/apps/app_api/api/v1/log",
+        json_data={"level": log_lvl, "message": content},
+    )
 
 
 def create_notification(user_id: str, subject: str, message: str):
@@ -208,7 +223,10 @@ def create_notification(user_id: str, subject: str, message: str):
         }
     }
     ocs_call(
-        method="POST", path=f"/ocs/v1.php/apps/app_api/api/v1/notification", json_data=params, user=user_id
+        method="POST",
+        path=f"/ocs/v1.php/apps/app_api/api/v1/notification",
+        json_data=params,
+        user=user_id,
     )
 
 
@@ -265,7 +283,9 @@ def convert_video_to_gif(input_file: UiActionFileInfo, user_id: str):
                 )
     except Exception as e:
         nc_log(3, "ExApp exception:" + str(e))
-        create_notification(user_id, "Error occurred", "Error information was written to log file")
+        create_notification(
+            user_id, "Error occurred", "Error information was written to log file"
+        )
 
 
 def extract_archive(input_file: UiActionFileInfo, user_id: str):
@@ -306,13 +326,20 @@ def extract_archive(input_file: UiActionFileInfo, user_id: str):
         for filename in Path(destination_path).rglob("*.*"):
             print(f"File: {str(filename)}")
             # print(f"DAV save path originally: {dav_save_file_path}")
-            dav_save_file_path = str(filename).replace(destination_path, f'/files/{user_id}{input_file.directory}/')
+            dav_save_file_path = str(filename).replace(
+                destination_path, f"/files/{user_id}{input_file.directory}/"
+            )
             # print(f"DAV save path replacing destination path: {dav_save_file_path}")
             dav_save_file_path = dav_save_file_path.replace("\\", "/")
             # print(f"Replacing the forward slashes: {dav_save_file_path}")
             dav_save_file_path = dav_save_file_path.replace("//", "/")
             print(f"Final DAV path: {dav_save_file_path}")
-            dav_call("PUT", dav_save_file_path, data=open(str(filename), "rb").read(), user=user_id)
+            dav_call(
+                "PUT",
+                dav_save_file_path,
+                data=open(str(filename), "rb").read(),
+                user=user_id,
+            )
 
         try:
             print("Removing original file")
@@ -334,7 +361,9 @@ def extract_archive(input_file: UiActionFileInfo, user_id: str):
 
     except Exception as e:
         nc_log(3, "ExApp exception:" + str(e))
-        create_notification(user_id, "Error occurred", "Error information was written to log file")
+        create_notification(
+            user_id, "Error occurred", "Error information was written to log file"
+        )
 
 
 def extract_archive_to_parent(input_file: UiActionFileInfo, user_id: str):
@@ -375,14 +404,21 @@ def extract_archive_to_parent(input_file: UiActionFileInfo, user_id: str):
         for filename in Path(destination_path).rglob("*.*"):
             print(f"File: {str(filename)}")
             # print(f"DAV save path originally: {dav_save_file_path}")
-            parent_folder = input_file.directory.rsplit('/', 1)[0]
-            dav_save_file_path = str(filename).replace(destination_path, f'/files/{user_id}{parent_folder}/')
+            parent_folder = input_file.directory.rsplit("/", 1)[0]
+            dav_save_file_path = str(filename).replace(
+                destination_path, f"/files/{user_id}{parent_folder}/"
+            )
             # print(f"DAV save path replacing destination path: {dav_save_file_path}")
             dav_save_file_path = dav_save_file_path.replace("\\", "/")
             # print(f"Replacing the forward slashes: {dav_save_file_path}")
             dav_save_file_path = dav_save_file_path.replace("//", "/")
             print(f"Final DAV path: {dav_save_file_path}")
-            dav_call("PUT", dav_save_file_path, data=open(str(filename), "rb").read(), user=user_id)
+            dav_call(
+                "PUT",
+                dav_save_file_path,
+                data=open(str(filename), "rb").read(),
+                user=user_id,
+            )
 
         try:
             print("Removing original file")
@@ -404,7 +440,9 @@ def extract_archive_to_parent(input_file: UiActionFileInfo, user_id: str):
 
     except Exception as e:
         nc_log(3, "ExApp exception:" + str(e))
-        create_notification(user_id, "Error occurred", "Error information was written to log file")
+        create_notification(
+            user_id, "Error occurred", "Error information was written to log file"
+        )
 
 
 def extract_archive_auto_testing(input_file: UiActionFileInfo, user_id: str):
@@ -440,7 +478,9 @@ def extract_archive_auto_testing(input_file: UiActionFileInfo, user_id: str):
 
         print(f"Checking dest path for archive {input_file.name}")
         try:
-            dav_destination_path = extract_folder_name(downloaded_file, Path(dav_get_file_path))
+            dav_destination_path = extract_folder_name(
+                downloaded_file, Path(dav_get_file_path)
+            )
             print(f"Extracting to: {dav_destination_path}")
         except Exception as ex:
             print(f"Error extracting archive: {ex}")
@@ -454,13 +494,20 @@ def extract_archive_auto_testing(input_file: UiActionFileInfo, user_id: str):
         for filename in Path(destination_path).rglob("*.*"):
             print(f"File: {str(filename)}")
             # print(f"DAV save path originally: {dav_save_file_path}")
-            dav_save_file_path = str(filename).replace(destination_path, f'{dav_destination_path}/')
+            dav_save_file_path = str(filename).replace(
+                destination_path, f"{dav_destination_path}/"
+            )
             # print(f"DAV save path replacing destination path: {dav_save_file_path}")
             dav_save_file_path = dav_save_file_path.replace("\\", "/")
             # print(f"Replacing the forward slashes: {dav_save_file_path}")
             dav_save_file_path = dav_save_file_path.replace("//", "/")
             print(f"Final DAV path: {dav_save_file_path}")
-            dav_call("PUT", dav_save_file_path, data=open(str(filename), "rb").read(), user=user_id)
+            dav_call(
+                "PUT",
+                dav_save_file_path,
+                data=open(str(filename), "rb").read(),
+                user=user_id,
+            )
             os.remove(str(filename))
 
         try:
@@ -478,14 +525,16 @@ def extract_archive_auto_testing(input_file: UiActionFileInfo, user_id: str):
 
     except Exception as e:
         nc_log(3, "ExApp exception:" + str(e))
-        create_notification(user_id, "Error occurred", "Error information was written to log file")
+        create_notification(
+            user_id, "Error occurred", "Error information was written to log file"
+        )
 
 
 @APP.post("/extract_to_here")
 def extract_to_here(
-        file: UiActionFileInfo,
-        request: Request,
-        background_tasks: BackgroundTasks,
+    file: UiActionFileInfo,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ):
     try:
         user_id = sign_check(request)
@@ -496,10 +545,10 @@ def extract_to_here(
 
 
 @APP.post("/extract_to_parent")
-def extract_to_here(
-        file: UiActionFileInfo,
-        request: Request,
-        background_tasks: BackgroundTasks,
+def extract_to_parent_endpoint(
+    file: UiActionFileInfo,
+    request: Request,
+    background_tasks: BackgroundTasks,
 ):
     try:
         user_id = sign_check(request)
@@ -512,8 +561,8 @@ def extract_to_here(
 
 @APP.put("/enabled")
 def enabled_callback(
-        enabled: bool,
-        request: Request,
+    enabled: bool,
+    request: Request,
 ):
     print("Running enabled")
 
@@ -546,7 +595,7 @@ def enabled_callback(
                 "POST",
                 "/ocs/v1.php/apps/app_api/api/v1/ui/files-actions-menu",
                 json_data={
-                    "name": "extract_to_here",
+                    "name": "extract_to_parent",
                     "displayName": "Extract TO PARENT",
                     "mime": "application/zip",
                     "permissions": 31,
@@ -591,5 +640,8 @@ if __name__ == "__main__":
         print("Error: %s - %s." % (e.filename, e.strerror))
 
     uvicorn.run(
-        "main:APP", host=os.environ.get("APP_HOST", "127.0.0.1"), port=int(os.environ["APP_PORT"]), log_level="trace"
+        "main:APP",
+        host=os.environ.get("APP_HOST", "127.0.0.1"),
+        port=int(os.environ["APP_PORT"]),
+        log_level="trace",
     )
