@@ -230,64 +230,6 @@ def create_notification(user_id: str, subject: str, message: str):
     )
 
 
-def convert_video_to_gif(input_file: UiActionFileInfo, user_id: str):
-    # save_path = path.splitext(input_file.user_path)[0] + ".gif"
-    if input_file.directory == "/":
-        dav_get_file_path = f"/files/{user_id}/{input_file.name}"
-    else:
-        dav_get_file_path = f"/files/{user_id}{input_file.directory}/{input_file.name}"
-    dav_save_file_path = os.path.splitext(dav_get_file_path)[0] + ".gif"
-    # ===========================================================
-    nc_log(2, f"Processing:{input_file.name}")
-    try:
-        with tempfile.NamedTemporaryFile(mode="w+b") as tmp_in:
-            r = dav_call("GET", dav_get_file_path, user=user_id)
-            tmp_in.write(r.content)
-            # ============================================
-            nc_log(2, "File downloaded")
-            tmp_in.flush()
-            cap = cv2.VideoCapture(tmp_in.name)
-            with tempfile.NamedTemporaryFile(mode="w+b", suffix=".gif") as tmp_out:
-                image_lst = []
-                previous_frame = None
-                skip = 0
-                while True:
-                    skip += 1
-                    ret, frame = cap.read()
-                    if frame is None:
-                        break
-                    if skip == 2:
-                        skip = 0
-                        continue
-                    if previous_frame is not None:
-                        diff = numpy.mean(previous_frame != frame)
-                        if diff < 0.91:
-                            continue
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    image_lst.append(frame_rgb)
-                    previous_frame = frame
-                    if len(image_lst) > 60:
-                        break
-                cap.release()
-                imageio.mimsave(tmp_out.name, image_lst)
-                optimize(tmp_out.name)
-                nc_log(2, "GIF is ready")
-                tmp_out.seek(0)
-                dav_call("PUT", dav_save_file_path, data=tmp_out.read(), user=user_id)
-                # ==========================================
-                nc_log(2, "Result uploaded")
-                create_notification(
-                    user_id,
-                    f"{input_file.name} finished!",
-                    f"{os.path.splitext(input_file.name)[0] + '.gif'} is waiting for you!",
-                )
-    except Exception as e:
-        nc_log(3, "ExApp exception:" + str(e))
-        create_notification(
-            user_id, "Error occurred", "Error information was written to log file"
-        )
-
-
 def extract_archive(input_file: UiActionFileInfo, user_id: str):
     # save_path = path.splitext(input_file.user_path)[0] + ".gif"
     if input_file.directory == "/":
@@ -445,6 +387,92 @@ def extract_archive_to_parent(input_file: UiActionFileInfo, user_id: str):
         )
 
 
+def extract_archive_to_filename(input_file: UiActionFileInfo, user_id: str):
+    # save_path = path.splitext(input_file.user_path)[0] + ".gif"
+    if input_file.directory == "/":
+        dav_get_file_path = f"/files/{user_id}/{input_file.name}"
+    else:
+        dav_get_file_path = f"/files/{user_id}{input_file.directory}/{input_file.name}"
+
+    # ===========================================================
+    nc_log(2, f"Processing: {input_file.name}")
+    nc_log(2, f"Full path is: {dav_get_file_path}")
+
+    temp_path = tempfile.gettempdir()
+    print(f"Temp path is: {temp_path}")
+
+    downloaded_file = os.path.join(temp_path, input_file.name)
+
+    try:
+        with open(downloaded_file, "wb") as tmp_in:
+            r = dav_call("GET", dav_get_file_path, user=user_id)
+            tmp_in.write(r.content)
+            # ============================================
+            nc_log(2, "File downloaded")
+            tmp_in.flush()
+
+        destination_path = os.path.join(temp_path, "Extracted")
+
+        if not os.path.exists(destination_path):
+            os.makedirs(destination_path)
+
+        print(f"Extracting archive {input_file.name}")
+        try:
+            Archive(downloaded_file).extractall(destination_path)
+        except Exception as ex:
+            print(f"Error extracting archive: {ex}")
+
+        for filename in Path(destination_path).rglob("*.*"):
+            print(f"File: {str(filename)}")
+            # print(f"DAV save path originally: {dav_save_file_path}")
+            parent_folder = input_file.directory.rsplit("/", 1)[0]
+            zip_file_name, extension = os.path.splitext(input_file.name)
+
+            dav_save_file_path = str(filename).replace(
+                destination_path,
+                f"/files/{user_id}{input_file.directory}/{zip_file_name}",
+            )
+
+            nc_log(2, f"DAV save path replacing destination path: {dav_save_file_path}")
+
+            dav_save_file_path = dav_save_file_path.replace("\\", "/")
+            # print(f"Replacing the forward slashes: {dav_save_file_path}")
+            dav_save_file_path = dav_save_file_path.replace("//", "/")
+
+            nc_log(2, f"Final DAV path: {dav_save_file_path}")
+
+            dav_call(
+                "PUT",
+                dav_save_file_path,
+                data=open(str(filename), "rb").read(),
+                user=user_id,
+            )
+
+        try:
+            print("Removing original file")
+            os.remove(downloaded_file)
+        except Exception as ex:
+            print(f"Error removing file: {ex}")
+
+        try:
+            shutil.rmtree(destination_path)
+        except OSError as e:
+            print("Error: %s - %s." % (e.filename, e.strerror))
+
+        nc_log(2, "Result uploaded")
+        create_notification(
+            user_id,
+            f"{input_file.name} finished!",
+            "Extracted file(s) are waiting for you!",
+        )
+
+    except Exception as e:
+        nc_log(3, "ExApp exception:" + str(e))
+        create_notification(
+            user_id, "Error occurred", "Error information was written to log file"
+        )
+
+
 def extract_archive_auto_testing(input_file: UiActionFileInfo, user_id: str):
     # save_path = path.splitext(input_file.user_path)[0] + ".gif"
     if input_file.directory == "/":
@@ -555,7 +583,37 @@ def extract_to_parent_endpoint(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     # background_tasks.add_task(extract_archive_to_parent, file, user_id)
+    background_tasks.add_task(extract_archive_to_parent, file, user_id)
+    return Response()
+
+
+@APP.post("/extract_to_auto")
+def extract_to_auto_endpoint(
+    file: UiActionFileInfo,
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        user_id = sign_check(request)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    # background_tasks.add_task(extract_archive_to_parent, file, user_id)
     background_tasks.add_task(extract_archive_auto_testing, file, user_id)
+    return Response()
+
+
+@APP.post("/extract_to_filename")
+def extract_to_filename_endpoint(
+    file: UiActionFileInfo,
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        user_id = sign_check(request)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    # background_tasks.add_task(extract_archive_to_parent, file, user_id)
+    background_tasks.add_task(extract_archive_to_filename, file, user_id)
     return Response()
 
 
@@ -607,6 +665,40 @@ def enabled_callback(
             if ocs_meta["status"] != "ok":
                 r = f"error: {ocs_meta['message']}"
                 print(f"Error from the files-actions-menu call: {ocs_meta['message']}")
+
+            result = ocs_call(
+                "POST",
+                "/ocs/v1.php/apps/app_api/api/v1/ui/files-actions-menu",
+                json_data={
+                    "name": "extract_to_auto",
+                    "displayName": "Extract To Auto",
+                    "mime": "application/zip",
+                    "permissions": 31,
+                    "actionHandler": "/extract_to_auto",
+                },
+            )
+            response_data = json.loads(result.text)
+            ocs_meta = response_data["ocs"]["meta"]
+            if ocs_meta["status"] != "ok":
+                r = f"error: {ocs_meta['message']}"
+                print(f"Error from the files-actions-menu call: {ocs_meta['message']}")
+
+            result = ocs_call(
+                "POST",
+                "/ocs/v1.php/apps/app_api/api/v1/ui/files-actions-menu",
+                json_data={
+                    "name": "extract_to_filename",
+                    "displayName": "Extract To Filename",
+                    "mime": "application/zip",
+                    "permissions": 31,
+                    "actionHandler": "/extract_to_filename",
+                },
+            )
+            response_data = json.loads(result.text)
+            ocs_meta = response_data["ocs"]["meta"]
+            if ocs_meta["status"] != "ok":
+                r = f"error: {ocs_meta['message']}"
+                print(f"Error from the files-actions-menu call: {ocs_meta['message']}")
         else:
             ocs_call(
                 "DELETE",
@@ -618,6 +710,18 @@ def enabled_callback(
                 "DELETE",
                 "/ocs/v1.php/apps/app_api/api/v1/ui/files-actions-menu",
                 json_data={"name": "extract_to_parent"},
+            )
+
+            ocs_call(
+                "DELETE",
+                "/ocs/v1.php/apps/app_api/api/v1/ui/files-actions-menu",
+                json_data={"name": "extract_to_auto"},
+            )
+
+            ocs_call(
+                "DELETE",
+                "/ocs/v1.php/apps/app_api/api/v1/ui/files-actions-menu",
+                json_data={"name": "extract_to_filename"},
             )
     except Exception as e:
         r = str(e)
