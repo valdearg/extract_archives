@@ -672,7 +672,7 @@ def enabled_callback(
                 json_data={
                     "name": "extract_to_auto",
                     "displayName": "Extract To Auto",
-                    "mime": ["application/zip", "application/rar"],
+                    "mime": "application/rar",
                     "permissions": 31,
                     "actionHandler": "/extract_to_auto",
                 },
