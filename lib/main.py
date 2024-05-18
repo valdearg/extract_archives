@@ -230,7 +230,7 @@ def create_notification(user_id: str, subject: str, message: str):
     )
 
 
-def extract_archive(input_file: UiActionFileInfo, user_id: str):
+def extract_archive_here(input_file: UiActionFileInfo, user_id: str):
     # save_path = path.splitext(input_file.user_path)[0] + ".gif"
     if input_file.directory == "/":
         dav_get_file_path = f"/files/{user_id}/{input_file.name}"
@@ -263,7 +263,7 @@ def extract_archive(input_file: UiActionFileInfo, user_id: str):
         try:
             Archive(downloaded_file).extractall(destination_path)
         except Exception as ex:
-            print(f"Error extracting archive: {ex}")
+            nc_log(2, f"Error extracting archive: {ex}")
 
         for filename in Path(destination_path).rglob("*.*"):
             print(f"File: {str(filename)}")
@@ -275,6 +275,12 @@ def extract_archive(input_file: UiActionFileInfo, user_id: str):
             dav_save_file_path = dav_save_file_path.replace("\\", "/")
             # print(f"Replacing the forward slashes: {dav_save_file_path}")
             dav_save_file_path = dav_save_file_path.replace("//", "/")
+
+            if f"/{Path(input_file.name).stem}/" in dav_save_file_path:
+                dav_save_file_path = dav_save_file_path.replace(
+                    f"/{Path(input_file.name).stem}/", "/"
+                )
+
             print(f"Final DAV path: {dav_save_file_path}")
             dav_call(
                 "PUT",
@@ -341,7 +347,7 @@ def extract_archive_to_parent(input_file: UiActionFileInfo, user_id: str):
         try:
             Archive(downloaded_file).extractall(destination_path)
         except Exception as ex:
-            print(f"Error extracting archive: {ex}")
+            nc_log(2, f"Error extracting archive: {ex}")
 
         for filename in Path(destination_path).rglob("*.*"):
             print(f"File: {str(filename)}")
@@ -420,7 +426,7 @@ def extract_archive_to_filename(input_file: UiActionFileInfo, user_id: str):
         try:
             Archive(downloaded_file).extractall(destination_path)
         except Exception as ex:
-            print(f"Error extracting archive: {ex}")
+            nc_log(2, f"Error extracting archive: {ex}")
 
         for filename in Path(destination_path).rglob("*.*"):
             print(f"File: {str(filename)}")
@@ -517,7 +523,7 @@ def extract_archive_auto_testing(input_file: UiActionFileInfo, user_id: str):
         try:
             Archive(downloaded_file).extractall(destination_path)
         except Exception as ex:
-            print(f"Error extracting archive: {ex}")
+            nc_log(2, f"Error extracting archive: {ex}")
 
         for filename in Path(destination_path).rglob("*.*"):
             print(f"File: {str(filename)}")
@@ -568,7 +574,7 @@ def extract_to_here(
         user_id = sign_check(request)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    background_tasks.add_task(extract_archive, file, user_id)
+    background_tasks.add_task(extract_archive_here, file, user_id)
     return Response()
 
 
@@ -638,7 +644,7 @@ def enabled_callback(
                 json_data={
                     "name": "extract_to_here",
                     "displayName": "Extract HERE",
-                    "mime": "application/zip",
+                    "mime": "application/zip,application/x-rar-compressed",
                     "permissions": 31,
                     "actionHandler": "/extract_to_here",
                 },
@@ -655,7 +661,7 @@ def enabled_callback(
                 json_data={
                     "name": "extract_to_parent",
                     "displayName": "Extract TO PARENT",
-                    "mime": "application/zip",
+                    "mime": "application/zip,application/x-rar-compressed",
                     "permissions": 31,
                     "actionHandler": "/extract_to_parent",
                 },
@@ -672,7 +678,7 @@ def enabled_callback(
                 json_data={
                     "name": "extract_to_auto",
                     "displayName": "Extract To Auto",
-                    "mime": "application/rar",
+                    "mime": "application/zip,application/x-rar-compressed",
                     "permissions": 31,
                     "actionHandler": "/extract_to_auto",
                 },
@@ -689,7 +695,7 @@ def enabled_callback(
                 json_data={
                     "name": "extract_to_filename",
                     "displayName": "Extract To Filename",
-                    "mime": "application/zip",
+                    "mime": "application/zip,application/x-rar-compressed",
                     "permissions": 31,
                     "actionHandler": "/extract_to_filename",
                 },
@@ -738,10 +744,11 @@ if __name__ == "__main__":
     main_temp_path = tempfile.gettempdir()
     main_destination_path = os.path.join(main_temp_path, "Extracted")
 
-    try:
-        shutil.rmtree(main_destination_path)
-    except OSError as ex:
-        print(f"Error: {ex.filename} - {ex.strerror}.")
+    if os.path.exists(main_destination_path):
+        try:
+            shutil.rmtree(main_destination_path)
+        except OSError as ex:
+            print(f"Error: {ex.filename} - {ex.strerror}.")
 
     uvicorn.run(
         "main:APP",
