@@ -1,5 +1,7 @@
 FROM python:3.10-slim-bookworm
 
+LABEL org.opencontainers.image.source="https://github.com/valdearg/extract_archives"
+
 COPY requirements.txt /
 
 ADD cs[s] /app/css
