@@ -224,7 +224,7 @@ def create_notification(user_id: str, subject: str, message: str):
     }
     ocs_call(
         method="POST",
-        path=f"/ocs/v1.php/apps/app_api/api/v1/notification",
+        path="/ocs/v1.php/apps/app_api/api/v1/notification",
         json_data=params,
         user=user_id,
     )
@@ -291,8 +291,8 @@ def extract_archive(input_file: UiActionFileInfo, user_id: str):
 
         try:
             shutil.rmtree(destination_path)
-        except OSError as e:
-            print("Error: %s - %s." % (e.filename, e.strerror))
+        except OSError as ex:
+            print(f"Error: {ex.filename} - {ex.strerror}.")
 
         nc_log(2, "Result uploaded")
         create_notification(
@@ -301,8 +301,8 @@ def extract_archive(input_file: UiActionFileInfo, user_id: str):
             "Extracted file(s) are waiting for you!",
         )
 
-    except Exception as e:
-        nc_log(3, "ExApp exception:" + str(e))
+    except Exception as ex:
+        nc_log(3, "ExApp exception:" + str(ex))
         create_notification(
             user_id, "Error occurred", "Error information was written to log file"
         )
@@ -370,8 +370,8 @@ def extract_archive_to_parent(input_file: UiActionFileInfo, user_id: str):
 
         try:
             shutil.rmtree(destination_path)
-        except OSError as e:
-            print("Error: %s - %s." % (e.filename, e.strerror))
+        except OSError as ex:
+            print(f"Error: {ex.filename} - {ex.strerror}.")
 
         nc_log(2, "Result uploaded")
         create_notification(
@@ -380,8 +380,8 @@ def extract_archive_to_parent(input_file: UiActionFileInfo, user_id: str):
             "Extracted file(s) are waiting for you!",
         )
 
-    except Exception as e:
-        nc_log(3, "ExApp exception:" + str(e))
+    except Exception as ex:
+        nc_log(3, "ExApp exception:" + str(ex))
         create_notification(
             user_id, "Error occurred", "Error information was written to log file"
         )
@@ -456,8 +456,8 @@ def extract_archive_to_filename(input_file: UiActionFileInfo, user_id: str):
 
         try:
             shutil.rmtree(destination_path)
-        except OSError as e:
-            print("Error: %s - %s." % (e.filename, e.strerror))
+        except OSError as ex:
+            print(f"Error: {ex.filename} - {ex.strerror}.")
 
         nc_log(2, "Result uploaded")
         create_notification(
@@ -466,8 +466,8 @@ def extract_archive_to_filename(input_file: UiActionFileInfo, user_id: str):
             "Extracted file(s) are waiting for you!",
         )
 
-    except Exception as e:
-        nc_log(3, "ExApp exception:" + str(e))
+    except Exception as ex:
+        nc_log(3, "ExApp exception:" + str(ex))
         create_notification(
             user_id, "Error occurred", "Error information was written to log file"
         )
@@ -551,8 +551,8 @@ def extract_archive_auto_testing(input_file: UiActionFileInfo, user_id: str):
             "Extracted file(s) are waiting for you!",
         )
 
-    except Exception as e:
-        nc_log(3, "ExApp exception:" + str(e))
+    except Exception as ex:
+        nc_log(3, "ExApp exception:" + str(ex))
         create_notification(
             user_id, "Error occurred", "Error information was written to log file"
         )
@@ -672,7 +672,7 @@ def enabled_callback(
                 json_data={
                     "name": "extract_to_auto",
                     "displayName": "Extract To Auto",
-                    "mime": "application/zip",
+                    "mime": ["application/zip", "application/rar"],
                     "permissions": 31,
                     "actionHandler": "/extract_to_auto",
                 },
@@ -723,8 +723,8 @@ def enabled_callback(
                 "/ocs/v1.php/apps/app_api/api/v1/ui/files-actions-menu",
                 json_data={"name": "extract_to_filename"},
             )
-    except Exception as e:
-        r = str(e)
+    except Exception as ex:
+        r = str(ex)
     print(f"enabled={enabled} -> {r}")
     return responses.JSONResponse(content={"error": r}, status_code=200)
 
@@ -740,8 +740,8 @@ if __name__ == "__main__":
 
     try:
         shutil.rmtree(main_destination_path)
-    except OSError as e:
-        print("Error: %s - %s." % (e.filename, e.strerror))
+    except OSError as ex:
+        print(f"Error: {ex.filename} - {ex.strerror}.")
 
     uvicorn.run(
         "main:APP",
