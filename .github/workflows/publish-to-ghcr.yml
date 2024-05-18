@@ -25,4 +25,4 @@ jobs:
 
       - name: "Build Inventory Image"
         run: |
-          docker buildx build --push --platform linux/arm64/v8,linux/amd64 --tag ghcr.io/valdearg/extract_archives:0.0.1 --tag ghcr.io/valdearg/extract_archives:latest .
+          docker buildx build --push --platform linux/amd64 --tag ghcr.io/valdearg/extract_archives:0.0.1 --tag ghcr.io/valdearg/extract_archives:latest .
